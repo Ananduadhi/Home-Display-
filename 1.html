@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Home display</title>
+<style>
+:root{--bg:#0e1114;--panel:#171b20;--line:#262c33;--text:#eef1f4;--dim:#8d97a2;--accent:#7fd1b9}
+*{box-sizing:border-box;margin:0}
+html,body{height:100%;background:var(--bg);color:var(--text);font-family:"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;overflow:hidden}
+#app{height:100%;display:grid;grid-template-columns:1fr;gap:28px;padding:32px 36px;transition:transform 2s ease}
+#app.live{grid-template-columns:minmax(0,1.1fr) minmax(0,1fr)}
+@media (orientation:portrait){#app{padding:24px 20px}#app.live{grid-template-columns:1fr;grid-template-rows:auto 1fr}}
+#clockCol{display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;cursor:pointer;user-select:none}
+#time{font-size:clamp(64px,17vw,190px);font-weight:200;letter-spacing:-.03em;line-height:1;font-variant-numeric:tabular-nums}
+#ampm{font-size:.22em;font-weight:400;color:var(--accent);margin-left:.15em;letter-spacing:0}
+#date{margin-top:14px;font-size:clamp(18px,3vw,34px);color:var(--dim)}
+#app.live #clockCol{align-items:flex-start;text-align:left}
+#wx{margin-top:18px;font-size:clamp(18px,3vw,30px);display:flex;gap:14px;align-items:baseline;flex-wrap:wrap;justify-content:center}
+#app.live #wx{justify-content:flex-start}
+#wx b{font-weight:300;font-size:1.8em;color:var(--text)}
+#wx span{color:var(--dim)}
+#side{display:none;flex-direction:column;gap:14px;min-height:0;overflow-y:auto;scrollbar-width:none}
+#side::-webkit-scrollbar{display:none}
+.card{position:relative;background:var(--panel);border:1px solid var(--line);border-left:6px solid var(--c,var(--accent));border-radius:16px;padding:16px 52px 16px 18px;animation:in .5s cubic-bezier(.2,.8,.2,1)}
+.card.out{animation:out .35s ease forwards}
+.card .app{font-size:15px;font-weight:600;color:var(--c,var(--accent))}
+.card .t{font-size:20px;margin-top:4px;font-weight:500}
+.card .b{font-size:16px;color:var(--dim);margin-top:4px;line-height:1.35}
+.card .x{position:absolute;top:10px;right:10px;width:36px;height:36px;border-radius:50%;border:0;background:#222931;color:var(--dim);font-size:18px}
+.card .x:active{background:#33404b;color:var(--text)}
+.card time{position:absolute;right:54px;top:16px;font-size:13px;color:var(--dim)}
+#media{display:none;align-items:center;gap:16px;background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px 18px;animation:in .5s cubic-bezier(.2,.8,.2,1)}
+#media.show{display:flex}
+#app.live #side{display:flex}
+#bars{display:flex;align-items:flex-end;gap:3px;height:30px;width:30px;flex:none}
+#bars i{flex:1;background:var(--accent);height:30%;border-radius:2px}
+#media.playing #bars i{animation:eq 1s ease-in-out infinite}
+#bars i:nth-child(2){animation-delay:.2s!important}#bars i:nth-child(3){animation-delay:.4s!important}
+#mt{font-size:20px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#ma,#ms{font-size:15px;color:var(--dim);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#mi{min-width:0;flex:1}
+@keyframes in{from{opacity:0;transform:translateX(60px)}to{opacity:1;transform:none}}
+@keyframes out{to{opacity:0;transform:translateX(60px)}}
+@keyframes eq{50%{height:100%}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="clockCol" title="Tap to switch 12/24 hour">
+    <div><span id="time">--:--</span><span id="ampm"></span></div>
+    <div id="date"></div>
+    <div id="wx"><span>Loading weather…</span></div>
+  </div>
+  <div id="side">
+    <div id="media"><div id="bars"><i></i><i></i><i></i></div>
+      <div id="mi"><div id="mt"></div><div id="ma"></div><div id="ms"></div></div></div>
+    <div id="cards"></div>
+  </div>
+</div>
+<script>
+(function(){
+  var is24=false;
+  try{is24=localStorage.getItem('h24')==='1'}catch(e){}
+  var $=function(id){return document.getElementById(id)};
+
+  function tick(){
+    var d=new Date(),h=d.getHours(),m=('0'+d.getMinutes()).slice(-2);
+    if(is24){$('time').textContent=('0'+h).slice(-2)+':'+m;$('ampm').textContent='';}
+    else{$('time').textContent=((h%12)||12)+':'+m;$('ampm').textContent=h<12?'am':'pm';}
+    $('date').textContent=d.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'long'});
+  }
+  $('clockCol').onclick=function(){is24=!is24;try{localStorage.setItem('h24',is24?'1':'0')}catch(e){}tick();};
+  tick();setInterval(tick,1000);
+
+  /* small drift every 3 min to protect the AMOLED panel */
+  setInterval(function(){var r=function(){return Math.round(Math.random()*12-6)};
+    $('app').style.transform='translate('+r()+'px,'+r()+'px)';},180000);
+
+  /* Weather: free Open-Meteo, no key. EDIT LAT/LON to your city. */
+  var LAT=13.0077,LON=77.7265;
+  var WMO={0:'Clear',1:'Mostly clear',2:'Partly cloudy',3:'Overcast',45:'Fog',48:'Fog',51:'Light drizzle',53:'Drizzle',55:'Heavy drizzle',61:'Light rain',63:'Rain',65:'Heavy rain',80:'Showers',81:'Showers',82:'Heavy showers',95:'Thunderstorm',96:'Thunderstorm',99:'Thunderstorm'};
+  function weather(){
+    fetch('https://api.open-meteo.com/v1/forecast?latitude='+LAT+'&longitude='+LON+'&current=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&timezone=auto')
+    .then(function(r){return r.json()}).then(function(d){
+      var w=$('wx');w.innerHTML='';
+      var b=document.createElement('b');b.textContent=Math.round(d.current.temperature_2m)+'\u00b0';
+      var c=document.createElement('span');c.textContent=WMO[d.current.weather_code]||'';
+      var h=document.createElement('span');h.textContent='H '+Math.round(d.daily.temperature_2m_max[0])+'\u00b0  L '+Math.round(d.daily.temperature_2m_min[0])+'\u00b0';
+      w.appendChild(b);w.appendChild(c);w.appendChild(h);
+    }).catch(function(){
+      var w=$('wx');if(!w.querySelector('b')){w.innerHTML='<span>Weather unavailable, retrying\u2026</span>';}
+      setTimeout(weather,60000);
+    });
+  }
+  weather();setInterval(weather,1200000);
+
+  var COLORS={swiggy:'#fc8019',zomato:'#e23744',blinkit:'#f8cb46',zepto:'#8b5cf6',amazon:'#38bdf8',flipkart:'#2874f0',instamart:'#fc8019',district:'#c084fc'};
+  var NAMES={swiggy:'Swiggy',zomato:'Zomato',blinkit:'Blinkit',zepto:'Zepto',amazon:'Amazon',flipkart:'Flipkart',instamart:'Instamart',district:'District'};
+  var MAX=6;
+
+  function refreshEmpty(){$('app').classList.toggle('live',$('cards').children.length>0||$('media').classList.contains('show'));}
+  function dismiss(el){if(!el||el.classList.contains('out'))return;el.classList.add('out');
+    setTimeout(function(){if(el.parentNode)el.parentNode.removeChild(el);refreshEmpty();},350);}
+  function clean(s){return String(s==null?'':s).replace(/\+/g,' ').slice(0,160);}
+
+  window.addDeliveryCard=function(appName,title,body){
+    var key=String(appName||'').toLowerCase(),c='#7fd1b9',label=clean(appName)||'Delivery',k;
+    for(k in COLORS){if(key.indexOf(k)>-1){c=COLORS[k];label=NAMES[k];break;}}
+    title=clean(title);body=clean(body);
+    var list=$('cards').children,i;
+    for(i=0;i<list.length;i++){ /* same app + title: replace the old card */
+      if(list[i].dataset.k===label+'|'+title){list[i].parentNode.removeChild(list[i]);break;}}
+    var el=document.createElement('div');el.className='card';el.dataset.k=label+'|'+title;el.style.setProperty('--c',c);
+    var n=new Date(),hh=n.getHours();
+    var stamp=((hh%12)||12)+':'+('0'+n.getMinutes()).slice(-2)+(hh<12?' am':' pm');
+    var a=document.createElement('div');a.className='app';a.textContent=label;
+    var tm=document.createElement('time');tm.textContent=stamp;
+    var t=document.createElement('div');t.className='t';t.textContent=title;
+    var b=document.createElement('div');b.className='b';b.textContent=body;
+    var x=document.createElement('button');x.className='x';x.textContent='\u2715';x.setAttribute('aria-label','Dismiss');
+    x.onclick=function(){dismiss(el)};
+    el.appendChild(a);el.appendChild(tm);if(title)el.appendChild(t);if(body)el.appendChild(b);el.appendChild(x);
+    $('cards').insertBefore(el,$('cards').firstChild);
+    while($('cards').children.length>MAX)$('cards').removeChild($('cards').lastChild);
+    refreshEmpty();
+    return true;
+  };
+
+  var idle=null;
+  window.updateMedia=function(title,artist,album,isPlaying){
+    var m=$('media'),playing=(isPlaying===true||String(isPlaying).toLowerCase()==='true'||String(isPlaying)==='1');
+    clearTimeout(idle);
+    if(!clean(title)){m.classList.remove('show','playing');refreshEmpty();return true;}
+    $('mt').textContent=clean(title);
+    $('ma').textContent=clean(artist);
+    $('ms').textContent=(clean(album)?clean(album)+' \u00b7 ':'')+(playing?'Playing':'Paused');
+    m.classList.add('show');m.classList.toggle('playing',playing);refreshEmpty();
+    if(!playing)idle=setTimeout(function(){m.classList.remove('show','playing');refreshEmpty();},120000); /* hide 2 min after pause */
+    return true;
+  };
+  window.clearMedia=function(){return window.updateMedia('');};
+  window.clearCards=function(){$('cards').innerHTML='';refreshEmpty();return true;};
+
+  /* test in a normal browser: 1.html?demo=1 */
+  if(/[?&]demo=1/.test(location.search)){
+    addDeliveryCard('Blinkit','Arriving in 8 min','Rahul is on the way with your order');
+    addDeliveryCard('Amazon','Out for delivery','Your package arrives today by 8 pm');
+    updateMedia('Kesariya','Arijit Singh','Brahmastra',true);
+  }
+  refreshEmpty();
+})();
+</script>
+</body>
+</html>
